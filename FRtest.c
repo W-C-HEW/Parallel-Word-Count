@@ -38,7 +38,6 @@ int main(int argc, char* argv[]){
 		}
 		printf("%d\n\n", size); //debug purpose
 		for(i=1; i<proc_count; i++){
-			printf("%d\n", startPointer);
 			endPointer--;
 			while(buffer[endPointer+1] != ' '){
 				if(buffer[endPointer+1]!= '\0')
@@ -51,7 +50,6 @@ int main(int argc, char* argv[]){
 				sendbuf = malloc(sendbufArraySize+1); //+1 for null terminator
 			else
 				sendbuf = realloc(sendbuf, sendbufArraySize+1); //+1 for null terminator
-				printf("sendbuf size = %d\n", sendbufArraySize);
 			for(ii=0; ii<sendbufArraySize; ii++){
 				sendbuf[ii] = buffer[startPointer+ii];
 			}
@@ -59,20 +57,12 @@ int main(int argc, char* argv[]){
 			printf("%s\n", sendbuf);
 			sizeSendBuffer = sendbufArraySize+1;
 			MPI_Send(&sizeSendBuffer, 1, MPI_INT, i, sizeTag, MPI_COMM_WORLD); //send size of data
-			printf("send buf size: %d\n", sendbufArraySize);
 			MPI_Send(sendbuf, sizeSendBuffer, MPI_CHAR, i, dataTag, MPI_COMM_WORLD);
 
-
-			printf("%d\n", endPointer);
 			endPointer++;
 			startPointer = endPointer;
-			if(size - endPointer == 0){ //check if there are still data remaining
-				//send 0 to remaining processes
-				continue;
-			}
+			
 			if(proc_count-(i+1)!= 0){
-				printf("size - endPointer = %d\n", size-endPointer);
-				printf("proc count = %d\n\n", proc_count-(i+1));
 				endPointer = endPointer+((size-endPointer)/(proc_count-(i+1)));
 			}
 		}
