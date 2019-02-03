@@ -26,24 +26,16 @@ int main(int argc, char* argv[]){
    			i++;
 		}
 		buffer[i-1]= '\0'; //Add null terminator to the end of char array
-		printf("%s\n", buffer); //debug purpose only
+		//printf("%s\n", buffer); //debug purpose only
 		fclose(fp);
 
-		//data set splitting with division
-		/*
-			array of 10, 3 processes
-			1. first process get 10/3 data
-			2. endPointer = 10/3 = 3
-			3. check if the data contains detached word 
-			4. move endPointer by +1 until the data contains no detached word
-			5. e.g: endPointer = 10/3 = 3, endpointer++, endPointer ++, endPointer = 5
-			6. firstProcess gets 5 data
-			7. array of 10 - 5 = 5
-			8. process 2 gets 5/2 = 2
-			9. repeats
-		*/
 		startPointer = 0;
-		endPointer = size/(proc_count-1);
+		if(proc_count != 1)
+			endPointer = size/(proc_count-1);
+		else{
+			printf("\x1B[31mError: Insufficient slave nodes\n");
+			exit(0);
+		}
 		printf("%d\n\n", size); //debug purpose
 		for(i=1; i<proc_count; i++){
 			printf("%d\n", startPointer);
@@ -67,7 +59,8 @@ int main(int argc, char* argv[]){
 			printf("%s\n", sendbuf);
 			sizeSendBuffer = sendbufArraySize+1;
 			MPI_Send(&sizeSendBuffer, 1, MPI_INT, i, sizeTag, MPI_COMM_WORLD); //send size of data
-
+			printf("send buf size: %d\n", sendbufArraySize);
+			MPI_Send(sendbuf, sizeSendBuffer, MPI_CHAR, i, dataTag, MPI_COMM_WORLD);
 
 
 			printf("%d\n", endPointer);
@@ -86,12 +79,20 @@ int main(int argc, char* argv[]){
 
 	}
 	//end of master node section
-
+		MPI_Barrier(MPI_COMM_WORLD);
 	//slave nodes section
 	if(my_rank!=0){
 		MPI_Recv(&sendbufArraySize, 1, MPI_INT, 0, sizeTag, MPI_COMM_WORLD, &status);
-		printf("Process %d received %d data\n", my_rank, sendbufArraySize-1);
+		if(sendbufArraySize-1 != 0){
+			recvbuf = malloc(sendbufArraySize);
+			MPI_Recv(recvbuf, sendbufArraySize, MPI_CHAR, 0, dataTag, MPI_COMM_WORLD, &status);
+			printf("Process %d received %d data: %s\n", my_rank, sendbufArraySize-1, recvbuf);
+		}
+		else
+			printf("Process %d received no data\n", my_rank);
 	}
+	//end of slave nodes section
+
 	MPI_Finalize();
 }
 
