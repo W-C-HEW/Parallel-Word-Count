@@ -6,7 +6,8 @@
 int main(int argc, char* argv[]){
 	int my_rank, proc_count;
 	FILE *fp; //file pointer
-	char buffer[0xFFFFF];
+	char *buffer;
+	buffer = malloc(0xFFFFFFFF);
 	int i=0, ii, size, startPointer, endPointer, sendbufArraySize, sizeSendBuffer;
 	char *sendbuf = NULL, *recvbuf;
 	int sizeTag=1, dataTag=2;
@@ -23,7 +24,8 @@ int main(int argc, char* argv[]){
 	//master node section
 	if(my_rank==0){
 		printf("Text file path: ");
-		scanf("%s", &filePath);
+		scanf("%[^\n]s", &filePath);
+		printf("%s\n", filePath);
 		fp = fopen(filePath, "r");
 		if(!fp){
 			printf("Error: Text file not found.\n");
@@ -41,6 +43,9 @@ int main(int argc, char* argv[]){
 			printf("Error: Invalid maximum letter per word.\n");
 			exit(0);
 		}
+		//Broadcast min and max number of letter
+		MPI_Bcast(&minLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&maxLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		fseek(fp, 0,SEEK_END);
 		size = ftell(fp);
 		rewind(fp);
@@ -49,7 +54,6 @@ int main(int argc, char* argv[]){
    			i++;
 		}
 		buffer[i-1]= '\0'; //Add null terminator to the end of char array
-		//printf("%s\n", buffer); //debug purpose only
 		fclose(fp);
 
 		startPointer = 0;
@@ -79,7 +83,6 @@ int main(int argc, char* argv[]){
 				sendbuf[ii] = buffer[startPointer+ii];
 			}
 			sendbuf[sendbufArraySize] = '\0';
-			printf("%s\n", sendbuf);
 			sizeSendBuffer = sendbufArraySize+1;
 			MPI_Send(&sizeSendBuffer, 1, MPI_INT, i, sizeTag, MPI_COMM_WORLD); //send size of data
 			MPI_Send(sendbuf, sizeSendBuffer, MPI_CHAR, i, dataTag, MPI_COMM_WORLD);
@@ -97,7 +100,10 @@ int main(int argc, char* argv[]){
 		
 	//slave nodes section
 	if(my_rank!=0){
+		MPI_Bcast(&minLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&maxLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Recv(&sendbufArraySize, 1, MPI_INT, 0, sizeTag, MPI_COMM_WORLD, &status);
+
 		if(sendbufArraySize-1 != 0){
 			recvbuf = malloc(sendbufArraySize);
 			MPI_Recv(recvbuf, sendbufArraySize, MPI_CHAR, 0, dataTag, MPI_COMM_WORLD, &status);
@@ -107,7 +113,7 @@ int main(int argc, char* argv[]){
 				i++;
 			while(recvbuf[i]!= '\0'){
 				if(recvbuf[i]==' ' || recvbuf[i]=='\t'){
-					if(letterCount>=3)
+					if(letterCount>=minLetter && letterCount<=maxLetter)
 						localCount++;
 					letterCount=0;
 					i++;
@@ -116,12 +122,12 @@ int main(int argc, char* argv[]){
 				else if(!ispunct(recvbuf[i])){
 					if(!isdigit(recvbuf[i])){
 						if(recvbuf[i]!= '\t')
-							letterCount++;
+								letterCount++;
 					}
 				}
 				i++;
 				if(recvbuf[i] == '\0'){
-					if(letterCount>=3)
+					if(letterCount>=minLetter && letterCount<=maxLetter)
 						localCount++;
 					letterCount=0;
 				}
@@ -134,6 +140,10 @@ int main(int argc, char* argv[]){
 	}
 	//end of slave nodes section
 
+	MPI_Reduce(&localCount, &globalCount, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+	if(my_rank == 0){
+		printf("Total number of words : %d\n", globalCount);
+	}
 	MPI_Finalize();
 }
 
