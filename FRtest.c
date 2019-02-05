@@ -11,6 +11,9 @@ int main(int argc, char* argv[]){
 	char *sendbuf = NULL, *recvbuf;
 	int sizeTag=1, dataTag=2;
 	int localCount=0, globalCount=0, letterCount=0;
+	int minLetter=0, maxLetter=0;
+	char filePath[0xFF];
+	char* endPoint;
 	MPI_Status status;
 
 	MPI_Init(&argc, &argv);
@@ -18,8 +21,26 @@ int main(int argc, char* argv[]){
 	MPI_Comm_size(MPI_COMM_WORLD, &proc_count);
 
 	//master node section
-	if(my_rank==0){	
-		fp = fopen("text.txt", "r");
+	if(my_rank==0){
+		printf("Text file path: ");
+		scanf("%s", &filePath);
+		fp = fopen(filePath, "r");
+		if(!fp){
+			printf("Error: Text file not found.\n");
+			exit(0);
+		}
+		printf("Minumum letter per word: ");
+		scanf("%d", &minLetter);
+		if(minLetter<=0){
+			printf("Error: Invalid minumum letter per word.\n");
+			exit(0);
+		}
+		printf("Maximum Letter per word: ");
+		scanf("%d", &maxLetter);
+		if(maxLetter<=minLetter){
+			printf("Error: Invalid maximum letter per word.\n");
+			exit(0);
+		}
 		fseek(fp, 0,SEEK_END);
 		size = ftell(fp);
 		rewind(fp);
@@ -73,7 +94,7 @@ int main(int argc, char* argv[]){
 
 	}
 	//end of master node section
-		MPI_Barrier(MPI_COMM_WORLD);
+		
 	//slave nodes section
 	if(my_rank!=0){
 		MPI_Recv(&sendbufArraySize, 1, MPI_INT, 0, sizeTag, MPI_COMM_WORLD, &status);
