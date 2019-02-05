@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <mpi.h>
 
 int main(int argc, char* argv[]){
@@ -9,6 +10,7 @@ int main(int argc, char* argv[]){
 	int i=0, ii, size, startPointer, endPointer, sendbufArraySize, sizeSendBuffer;
 	char *sendbuf = NULL, *recvbuf;
 	int sizeTag=1, dataTag=2;
+	int localCount=0, globalCount=0, letterCount=0;
 	MPI_Status status;
 
 	MPI_Init(&argc, &argv);
@@ -77,9 +79,36 @@ int main(int argc, char* argv[]){
 			recvbuf = malloc(sendbufArraySize);
 			MPI_Recv(recvbuf, sendbufArraySize, MPI_CHAR, 0, dataTag, MPI_COMM_WORLD, &status);
 			printf("Process %d received %d data: %s\n", my_rank, sendbufArraySize-1, recvbuf);
+			i=0;
+			while(recvbuf[i]==' ' || recvbuf[i] == '\t')
+				i++;
+			while(recvbuf[i]!= '\0'){
+				if(recvbuf[i]==' ' || recvbuf[i]=='\t'){
+					if(letterCount>=3)
+						localCount++;
+					letterCount=0;
+					i++;
+					continue;
+				}
+				else if(!ispunct(recvbuf[i])){
+					if(!isdigit(recvbuf[i])){
+						if(recvbuf[i]!= '\t')
+							letterCount++;
+					}
+				}
+				i++;
+				if(recvbuf[i] == '\0'){
+					printf("Process %d letterCount %d\n", my_rank, letterCount);
+					if(letterCount>=3)
+						localCount++;
+					letterCount=0;
+				}
+			}
 		}
 		else
 			printf("Process %d received no data\n", my_rank);
+		
+		printf("Process %d has %d words: %s\n", my_rank, localCount, recvbuf);
 	}
 	//end of slave nodes section
 
