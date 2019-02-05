@@ -42,6 +42,8 @@ int main(int argc, char* argv[]){
 		for(i=1; i<proc_count; i++){
 			endPointer--;
 			while(buffer[endPointer+1] != ' '){
+				if(buffer[endPointer+1] == '\t')
+					break;
 				if(buffer[endPointer+1]!= '\0')
 					endPointer++;
 				else
@@ -98,7 +100,6 @@ int main(int argc, char* argv[]){
 				}
 				i++;
 				if(recvbuf[i] == '\0'){
-					printf("Process %d letterCount %d\n", my_rank, letterCount);
 					if(letterCount>=3)
 						localCount++;
 					letterCount=0;
@@ -108,7 +109,7 @@ int main(int argc, char* argv[]){
 		else
 			printf("Process %d received no data\n", my_rank);
 		
-		printf("Process %d has %d words: %s\n", my_rank, localCount, recvbuf);
+		printf("Process %d has %d words\n", my_rank, localCount);
 	}
 	//end of slave nodes section
 
