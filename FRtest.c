@@ -69,8 +69,11 @@ int main(int argc, char* argv[]){
 			while(buffer[endPointer+1] != ' '){
 				if(buffer[endPointer+1] == '\t')
 					break;
-				if(buffer[endPointer+1]!= '\0')
+				if(buffer[endPointer+1] == '\n')
+					break;
+				if(buffer[endPointer+1]!= '\0'){
 					endPointer++;
+				}
 				else
 					break;
 			}
@@ -112,9 +115,12 @@ int main(int argc, char* argv[]){
 			while(recvbuf[i]==' ' || recvbuf[i] == '\t')
 				i++;
 			while(recvbuf[i]!= '\0'){
-				if(recvbuf[i]==' ' || recvbuf[i]=='\t'){
-					if(letterCount>=minLetter && letterCount<=maxLetter)
+				if(recvbuf[i]==' ' || recvbuf[i]=='\t' || recvbuf[i]=='\n'){
+					if(letterCount>=minLetter && letterCount<=maxLetter){
 						localCount++;
+						if(my_rank == 3)
+						printf("letterCount %d\n", letterCount);
+					}
 					letterCount=0;
 					i++;
 					continue;
@@ -127,8 +133,11 @@ int main(int argc, char* argv[]){
 				}
 				i++;
 				if(recvbuf[i] == '\0'){
-					if(letterCount>=minLetter && letterCount<=maxLetter)
+					if(letterCount>=minLetter && letterCount<=maxLetter){
 						localCount++;
+						if(my_rank==3)
+							printf("letterCount2 %d\n", letterCount);
+					}
 					letterCount=0;
 				}
 			}
