@@ -15,6 +15,7 @@ int main(int argc, char* argv[]){
 	int minLetter=0, maxLetter=0;
 	char filePath[0xFF];
 	char* endPoint;
+	char test[0xFF];
 	MPI_Status status;
 
 	MPI_Init(&argc, &argv);
@@ -110,7 +111,7 @@ int main(int argc, char* argv[]){
 		if(sendbufArraySize-1 != 0){
 			recvbuf = malloc(sendbufArraySize);
 			MPI_Recv(recvbuf, sendbufArraySize, MPI_CHAR, 0, dataTag, MPI_COMM_WORLD, &status);
-			printf("Process %d received %d data: %s\n", my_rank, sendbufArraySize-1, recvbuf);
+			printf("Process %d received %d data: \n", my_rank, sendbufArraySize-1);
 			i=0;
 			while(recvbuf[i]==' ' || recvbuf[i] == '\t')
 				i++;
@@ -118,27 +119,33 @@ int main(int argc, char* argv[]){
 				if(recvbuf[i]==' ' || recvbuf[i]=='\t' || recvbuf[i]=='\n'){
 					if(letterCount>=minLetter && letterCount<=maxLetter){
 						localCount++;
-						if(my_rank == 3)
-						printf("letterCount %d\n", letterCount);
+						test[0]='\0';
 					}
+					else
+						printf("process %d Dropped word1 : %s, %d\n", my_rank, test, letterCount);
+					test[0]='\0';
 					letterCount=0;
 					i++;
 					continue;
 				}
 				else if(!ispunct(recvbuf[i])){
 					if(!isdigit(recvbuf[i])){
-						if(recvbuf[i]!= '\t')
-								letterCount++;
+						if(recvbuf[i]!= '\t'){
+							test[letterCount] = recvbuf[i];
+							letterCount++;
+						}
 					}
 				}
 				i++;
 				if(recvbuf[i] == '\0'){
 					if(letterCount>=minLetter && letterCount<=maxLetter){
 						localCount++;
-						if(my_rank==3)
-							printf("letterCount2 %d\n", letterCount);
+						test[0]='\0';
 					}
+					else
+						printf("Dropped word2 : %s, %d\n", test, letterCount);
 					letterCount=0;
+					test[0]='\0';
 				}
 			}
 		}
@@ -148,7 +155,7 @@ int main(int argc, char* argv[]){
 		printf("Process %d has %d words\n", my_rank, localCount);
 	}
 	//end of slave nodes section
-
+	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Reduce(&localCount, &globalCount, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 	if(my_rank == 0){
 		printf("Total number of words : %d\n", globalCount);
