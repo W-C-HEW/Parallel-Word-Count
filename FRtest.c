@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>
 #include <mpi.h>
 
 int main(int argc, char* argv[]){
@@ -10,17 +11,22 @@ int main(int argc, char* argv[]){
 	buffer = malloc(0xFFFFFFFF);
 	int i=0, ii, size, startPointer, endPointer, sendbufArraySize, sizeSendBuffer;
 	char *sendbuf = NULL, *recvbuf;
-	int sizeTag=1, dataTag=2;
+	int sizeTag=1;
 	int localCount=0, globalCount=0, letterCount=0;
 	int minLetter=0, maxLetter=0;
 	char filePath[0xFF];
 	char* endPoint;
-	char test[0xFF];
-	MPI_Status status;
+	double startTime, endTime;
+	double divStartTime, divEndTime, totalDivTime=0;
+	double compStartTime, compEndTime;
+	double setupTimeStart, setupTimeEnd;
+	MPI_Status status1;
 
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &proc_count);
+	MPI_Status status[proc_count-1];
+	MPI_Request reqs[proc_count-1];
 
 	//master node section
 	if(my_rank==0){
@@ -44,6 +50,7 @@ int main(int argc, char* argv[]){
 			printf("Error: Invalid maximum letter per word.\n");
 			exit(0);
 		}
+		startTime = MPI_Wtime();
 		//Broadcast min and max number of letter
 		MPI_Bcast(&minLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&maxLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -66,6 +73,7 @@ int main(int argc, char* argv[]){
 		}
 		printf("%d\n\n", size); //debug purpose
 		for(i=1; i<proc_count; i++){
+			setupTimeStart = MPI_Wtime();
 			endPointer--;
 			while(buffer[endPointer+1] != ' '){
 				if(buffer[endPointer+1] == '\t')
@@ -83,14 +91,24 @@ int main(int argc, char* argv[]){
 				sendbuf = malloc(sendbufArraySize+1); //+1 for null terminator
 			else
 				sendbuf = realloc(sendbuf, sendbufArraySize+1); //+1 for null terminator
-			for(ii=0; ii<sendbufArraySize; ii++){
-				sendbuf[ii] = buffer[startPointer+ii];
-			}
+			if(i != 1)
+				MPI_Wait(&reqs[i-2], &status[i-2]);
+			memcpy(sendbuf, buffer + startPointer, sendbufArraySize);
+			setupTimeEnd = MPI_Wtime();
+			printf("SETUP TIME %d: %.10f\n", i, setupTimeEnd-setupTimeStart);
+			//for(ii=0; ii<sendbufArraySize; ii++){
+			//	sendbuf[ii] = buffer[startPointer+ii];
+			//}
 			sendbuf[sendbufArraySize] = '\0';
 			sizeSendBuffer = sendbufArraySize+1;
 			MPI_Send(&sizeSendBuffer, 1, MPI_INT, i, sizeTag, MPI_COMM_WORLD); //send size of data
-			MPI_Send(sendbuf, sizeSendBuffer, MPI_CHAR, i, dataTag, MPI_COMM_WORLD);
-
+			divStartTime = MPI_Wtime();
+			//if(i != 1)
+			//	MPI_Wait(&reqs[i-2], &status[i-2]);
+			MPI_Isend(sendbuf, sizeSendBuffer, MPI_CHAR, i, i+1, MPI_COMM_WORLD, &reqs[i-1]);
+			divEndTime = MPI_Wtime();
+			printf("process %d send time : %.10f\n", i, divEndTime-divStartTime);
+			totalDivTime += (divEndTime-divStartTime);
 			endPointer++;
 			startPointer = endPointer;
 			
@@ -98,6 +116,7 @@ int main(int argc, char* argv[]){
 				endPointer = endPointer+((size-endPointer)/(proc_count-(i+1)));
 			}
 		}
+		printf("total divTime : %.10fs\n", totalDivTime);
 
 	}
 	//end of master node section
@@ -106,12 +125,13 @@ int main(int argc, char* argv[]){
 	if(my_rank!=0){
 		MPI_Bcast(&minLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&maxLetter, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		MPI_Recv(&sendbufArraySize, 1, MPI_INT, 0, sizeTag, MPI_COMM_WORLD, &status);
-
+		MPI_Recv(&sendbufArraySize, 1, MPI_INT, 0, sizeTag, MPI_COMM_WORLD, &status1);
+		compStartTime = MPI_Wtime();
 		if(sendbufArraySize-1 != 0){
 			recvbuf = malloc(sendbufArraySize);
-			MPI_Recv(recvbuf, sendbufArraySize, MPI_CHAR, 0, dataTag, MPI_COMM_WORLD, &status);
+			MPI_Recv(recvbuf, sendbufArraySize, MPI_CHAR, 0, my_rank+1, MPI_COMM_WORLD, &status[my_rank-1]);
 			printf("Process %d received %d data: \n", my_rank, sendbufArraySize-1);
+
 			i=0;
 			while(recvbuf[i]==' ' || recvbuf[i] == '\t')
 				i++;
@@ -119,11 +139,7 @@ int main(int argc, char* argv[]){
 				if(recvbuf[i]==' ' || recvbuf[i]=='\t' || recvbuf[i]=='\n'){
 					if(letterCount>=minLetter && letterCount<=maxLetter){
 						localCount++;
-						test[0]='\0';
 					}
-					else
-						printf("process %d Dropped word1 : %s, %d\n", my_rank, test, letterCount);
-					test[0]='\0';
 					letterCount=0;
 					i++;
 					continue;
@@ -131,7 +147,6 @@ int main(int argc, char* argv[]){
 				else if(!ispunct(recvbuf[i])){
 					if(!isdigit(recvbuf[i])){
 						if(recvbuf[i]!= '\t'){
-							test[letterCount] = recvbuf[i];
 							letterCount++;
 						}
 					}
@@ -140,25 +155,24 @@ int main(int argc, char* argv[]){
 				if(recvbuf[i] == '\0'){
 					if(letterCount>=minLetter && letterCount<=maxLetter){
 						localCount++;
-						test[0]='\0';
 					}
-					else
-						printf("Dropped word2 : %s, %d\n", test, letterCount);
 					letterCount=0;
-					test[0]='\0';
 				}
 			}
 		}
 		else
 			printf("Process %d received no data\n", my_rank);
-		
+		compEndTime = MPI_Wtime();
+		printf("Process %d comp time = %.10f\n", my_rank, compEndTime-compStartTime);
 		printf("Process %d has %d words\n", my_rank, localCount);
 	}
 	//end of slave nodes section
-	MPI_Barrier(MPI_COMM_WORLD);
+	
 	MPI_Reduce(&localCount, &globalCount, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 	if(my_rank == 0){
 		printf("Total number of words : %d\n", globalCount);
+		endTime = MPI_Wtime();
+		printf("Elapsed time : %.10fs\n", endTime - startTime);
 	}
 	MPI_Finalize();
 }
